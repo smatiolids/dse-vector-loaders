@@ -8,6 +8,7 @@ import csv
 import time
 import json
 
+
 load_dotenv()
 
 session = getCQLSession(os.environ["MODE"])
