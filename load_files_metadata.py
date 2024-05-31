@@ -7,7 +7,7 @@ from cassandra.query import BatchType
 import csv
 import time
 import json
-from random import randrange
+from random import randrange, sample
 
 load_dotenv()
 
@@ -15,11 +15,19 @@ session = getCQLSession(os.environ["MODE"])
 table = os.environ["DSE_TABLE"]
 
 cmd_insert = f"""
-INSERT INTO {table} (id, title, emb)
-VALUES (:id, :title, :emb)
+UPDATE {table} SET metadata = :metadata WHERE id = :id
 """
 
 prepared_stmt_insert = session.prepare(cmd_insert)
+
+def generate_random_dict():
+    keys = [f'k{str(i).zfill(2)}' for i in range(1, 100)]
+    values = [f'v{str(i).zfill(2)}' for i in range(100)]
+    
+    random_keys = sample(keys, 20)
+    random_values = sample(values, 20)
+    
+    return {key: value for key, value in zip(random_keys, random_values)}
 
 def load_jsonl(file_path, batch_size=25):
     batch = BatchStatement(batch_type=BatchType.UNLOGGED)
@@ -31,7 +39,7 @@ def load_jsonl(file_path, batch_size=25):
             try:
                 count += 1
                 row = json.loads(line.strip())
-                batch.add(prepared_stmt_insert, {"id": row['id'], "title": row['title'], "emb": row["titleVector"]})
+                batch.add(prepared_stmt_insert, {"id": row['id'], "metadata": generate_random_dict()})
                 if count % batch_size == 0:
                     rs = session.execute(batch)
                     batch.clear()
@@ -94,8 +102,8 @@ def main():
     # Iterate over files in directory
     while True:
         remaining , filename = get_file(directory)
-        if filename == 'NONE':
-            exit
+        if remaining == 0:
+            break
         count += 1
         file_path = os.path.join(directory, filename)
         if os.path.isfile(file_path):
@@ -107,6 +115,7 @@ def main():
             end = time.time()
             print(f"Time to load: {end - start} : {qty} records ( {qty / (end - start)} recs/sec)")
             os.rename(file_path_processing, os.path.join(directory+"/processed", filename))
+    print("No more files to process")
 
 
 if __name__ == "__main__":
